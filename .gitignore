@@ -1,0 +1,13 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Your private financial CSVs — never commit these
+Imports/
+
+# Database (Part E)
+data/*.db
+
+# VS Code
+.vscode/
