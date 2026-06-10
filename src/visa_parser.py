@@ -17,20 +17,23 @@ from pathlib import Path
 
 # ── 1. THE MAIN FUNCTION ───────────────────────────────────────────────────────
 
-def parse_visa_csv(file_path: str) -> list[dict]:
+import io
+
+def parse_visa_csv(source) -> list[dict]:
     """
-    Takes a path to a TD Visa CSV export.
+    Takes a file path (str/Path) or file-like object (e.g. from Streamlit uploader).
     Returns a list of clean transaction dicts.
     """
+    if isinstance(source, (str, Path)):
+        path = Path(source)
+        if not path.exists():
+            raise FileNotFoundError(f"Could not find file: {source}")
+        file_to_read = path
+    else:
+        file_to_read = io.TextIOWrapper(source, encoding="utf-8-sig")
 
-    path = Path(file_path)
-
-    if not path.exists():
-        raise FileNotFoundError(f"Could not find file: {file_path}")
-
-    # ── Step 1: Read the raw CSV (TD exports no header row) ────────────────────
     df = pd.read_csv(
-        path,
+        file_to_read,
         header=None,
         names=["date", "description_raw", "debit", "credit", "card"],
     )
@@ -71,7 +74,10 @@ def parse_visa_csv(file_path: str) -> list[dict]:
     df["card_last4"] = df["card"].str.strip()
 
     # ── Step 8: Add source file name for traceability ─────────────────────────
-    df["source_file"] = path.name
+    if isinstance(source, (str, Path)):
+        df["source_file"] = path.name
+    else:
+        df["source_file"] = source.name
 
     # ── Step 9: Build final output list ───────────────────────────────────────
     columns = [
