@@ -36,7 +36,8 @@ def setup_db():
 
         CREATE TABLE IF NOT EXISTS categories (
             CategoryID   INTEGER PRIMARY KEY,
-            CategoryName TEXT UNIQUE
+            CategoryName TEXT UNIQUE,
+            BucketID     INTEGER REFERENCES buckets(BucketID)
         );
 
         CREATE TABLE IF NOT EXISTS buckets (
@@ -52,11 +53,6 @@ def setup_db():
             Priority   INTEGER
         );
 
-        CREATE TABLE IF NOT EXISTS BucketRules (
-            CategoryID INTEGER REFERENCES categories(CategoryID),
-            BucketID   INTEGER REFERENCES buckets(BucketID),
-            PRIMARY KEY (CategoryID, BucketID)
-        );
 
         CREATE TABLE IF NOT EXISTS transactions (
             TransactionID  INTEGER PRIMARY KEY,
