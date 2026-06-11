@@ -3,12 +3,6 @@ from pathlib import Path
 
 DB_PATH = Path(__file__).parent.parent / "data" / "budget.db"
 
-CATEGORIES = [
-    "Alcohol", "Clothing", "Coffee", "Education", "Fast Food", "Fitness",
-    "Gas & Fuel", "Groceries", "Online Shopping", "Payment",
-    "Professional Services", "Restaurants", "Shopping", "Transit",
-    "Uncategorized", "Work Meals"
-]
 
 ACCOUNTS = [
     ("TD Visa", "credit", "TD"),
@@ -81,12 +75,6 @@ def setup_db():
             Amount        REAL    -- computed: transaction amount * percentage / 100
         );
     """)
-
-    # Seed categories
-    cur.executemany(
-        "INSERT OR IGNORE INTO categories (CategoryName) VALUES (?)",
-        [(c,) for c in CATEGORIES]
-    )
 
     # Seed accounts
     cur.executemany(
