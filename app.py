@@ -334,34 +334,81 @@ elif page == "Categories":
 
     con = get_connection()
     cur = con.cursor()
-    cur.execute("SELECT CategoryID, CategoryName FROM categories ORDER BY CategoryName")
+    cur.execute("""
+        SELECT c.CategoryID, c.CategoryName, COALESCE(b.BucketName, '⚠ Unassigned') AS Bucket
+        FROM categories c
+        LEFT JOIN buckets b ON c.BucketID = b.BucketID
+        ORDER BY c.CategoryName
+    """)
     cats = cur.fetchall()
     con.close()
 
-    cat_df = pd.DataFrame(cats, columns=["ID", "Category"])
+    cat_df = pd.DataFrame(cats, columns=["ID", "Category", "Bucket"])
     st.dataframe(cat_df, use_container_width=True, hide_index=True)
 
     st.divider()
     st.write("**Add new category**")
-    new_cat = st.text_input("Category name", key="new_cat_input")
-    if st.button("Add Category"):
-        if new_cat.strip():
+
+    buckets = _get_buckets()
+
+    if not buckets:
+        st.warning("You need at least one bucket before adding categories. Go to the **Buckets** page first.")
+    else:
+        new_cat        = st.text_input("Category name", key="new_cat_input")
+        new_cat_bucket = st.selectbox("Assign to bucket", buckets, key="new_cat_bucket")
+
+        if st.button("Add Category"):
+            if new_cat.strip():
+                con = get_connection()
+                cur = con.cursor()
+                try:
+                    cur.execute("SELECT BucketID FROM buckets WHERE BucketName = ?", (new_cat_bucket,))
+                    bucket_id = cur.fetchone()[0]
+                    cur.execute(
+                        "INSERT INTO categories (CategoryName, BucketID) VALUES (?, ?)",
+                        (new_cat.strip(), bucket_id),
+                    )
+                    con.commit()
+                    st.success(f"Added: {new_cat.strip()} → {new_cat_bucket}")
+                except Exception as e:
+                    st.error(f"Error: {e}")
+                finally:
+                    con.close()
+                st.rerun()
+            else:
+                st.warning("Please enter a category name.")
+
+    # ── Reassign bucket for existing categories ───────────────────────────────
+    st.divider()
+    st.write("**Reassign bucket**")
+
+    unassigned = [c for c in cats if c[2] == "⚠ Unassigned"]
+    if unassigned:
+        st.warning(f"{len(unassigned)} categor{'y' if len(unassigned) == 1 else 'ies'} not yet assigned to a bucket.")
+
+    if cats and buckets:
+        cat_names         = [c[1] for c in cats]
+        cat_to_reassign   = st.selectbox("Select category", cat_names, key="reassign_cat")
+        new_bucket_assign = st.selectbox("Assign to bucket", buckets, key="reassign_bucket")
+
+        if st.button("Save Assignment"):
             con = get_connection()
             cur = con.cursor()
-            try:
-                cur.execute("INSERT INTO categories (CategoryName) VALUES (?)", (new_cat.strip(),))
-                con.commit()
-                st.success(f"Added: {new_cat.strip()}")
-            except Exception as e:
-                st.error(f"Error: {e}")
-            finally:
-                con.close()
+            cur.execute("SELECT BucketID FROM buckets WHERE BucketName = ?", (new_bucket_assign,))
+            bucket_id = cur.fetchone()[0]
+            cur.execute(
+                "UPDATE categories SET BucketID = ? WHERE CategoryName = ?",
+                (bucket_id, cat_to_reassign),
+            )
+            con.commit()
+            con.close()
+            st.success(f"Updated: {cat_to_reassign} → {new_bucket_assign}")
             st.rerun()
-        else:
-            st.warning("Please enter a category name.")
 
+    # ── Delete category ───────────────────────────────────────────────────────
     st.divider()
     st.write("**Delete category**")
+
     cat_names = [c[1] for c in cats]
     if cat_names:
         cat_to_delete = st.selectbox("Select category to delete", cat_names, key="delete_cat")
