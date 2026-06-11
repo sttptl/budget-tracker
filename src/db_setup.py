@@ -15,8 +15,12 @@ ACCOUNTS = [
     ("TD Chequing", "chequing", "TD"),
 ]
 
+
 def get_connection():
-    return sqlite3.connect(DB_PATH)
+    con = sqlite3.connect(DB_PATH)
+    con.execute("PRAGMA foreign_keys = ON")
+    return con
+
 
 def setup_db():
     con = get_connection()
@@ -37,7 +41,7 @@ def setup_db():
 
         CREATE TABLE IF NOT EXISTS buckets (
             BucketID   INTEGER PRIMARY KEY,
-            BucketName TEXT
+            BucketName TEXT UNIQUE
         );
 
         CREATE TABLE IF NOT EXISTS CategoryRules (
@@ -69,6 +73,17 @@ def setup_db():
             SourceFile     TEXT,
             ImportedAt     DATETIME
         );
+
+        -- One row per bucket per income transaction.
+        -- Percentage and Amount are stored so the dashboard
+        -- can use either without recomputing.
+        CREATE TABLE IF NOT EXISTS income_allocations (
+            AllocationID  INTEGER PRIMARY KEY,
+            TransactionID INTEGER REFERENCES transactions(TransactionID) ON DELETE CASCADE,
+            BucketID      INTEGER REFERENCES buckets(BucketID),
+            Percentage    REAL,   -- e.g. 40.0 for 40%
+            Amount        REAL    -- computed: transaction amount * percentage / 100
+        );
     """)
 
     # Seed categories
@@ -86,6 +101,7 @@ def setup_db():
     con.commit()
     con.close()
     print(f"DB ready at {DB_PATH}")
+
 
 if __name__ == "__main__":
     setup_db()

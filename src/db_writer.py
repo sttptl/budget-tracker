@@ -5,7 +5,9 @@ from pathlib import Path
 DB_PATH = Path(__file__).parent.parent / "data" / "budget.db"
 
 def get_connection():
-    return sqlite3.connect(DB_PATH)
+    con = sqlite3.connect(DB_PATH)
+    con.execute("PRAGMA foreign_keys = ON")
+    return con
 
 def get_category_id(cur, category_name: str) -> int:
     cur.execute("SELECT CategoryID FROM categories WHERE CategoryName = ?", (category_name,))
@@ -91,3 +93,128 @@ def write_transactions(reviewed_df, original_txns: list[dict], account_name: str
     con.commit()
     con.close()
     return {"inserted": inserted, "skipped": skipped}
+def write_chequing_transactions(
+    income_df,
+    expense_df,
+    original_txns: list[dict],
+    allocation_data: dict,
+    account_name: str,
+) -> dict:
+    """
+    Writes chequing income + expense transactions to the transactions table,
+    and writes per-bucket allocation rows to income_allocations for income rows.
+
+    allocation_data shape:
+      { txn_id: { bucket_name: { "percentage": float, "amount": float } } }
+    """
+    con = get_connection()
+    cur = con.cursor()
+
+    account_id  = get_account_id(cur, account_name)
+    imported_at = datetime.now().isoformat()
+
+    # Build lookup: (description_raw, date_str) → original txn
+    original_lookup = {
+        (t["description_raw"], t["date"].strftime("%Y-%m-%d") if hasattr(t["date"], "strftime") else t["date"]): t
+        for t in original_txns
+    }
+
+    # Build bucket name → BucketID lookup
+    cur.execute("SELECT BucketName, BucketID FROM buckets")
+    bucket_id_map = {row[0]: row[1] for row in cur.fetchall()}
+
+    inserted             = 0
+    skipped              = 0
+    allocations_written  = 0
+
+    def _insert_txn(row, original, amount):
+        """Insert one transaction row. Returns the new TransactionID or None if skipped."""
+        original_category = original.get("category", "Uncategorized")
+        edited_category   = row["category"]
+        if edited_category != original_category:
+            match_rule = "manual"
+            confidence = 1.0
+        else:
+            match_rule = original.get("match_rule", "")
+            confidence = original.get("confidence", 0.0)
+
+        category_id = get_category_id(cur, edited_category)
+
+        try:
+            cur.execute("""
+                INSERT INTO transactions (
+                    DedupeHash, AccountID, Date, DescriptionRaw, Amount,
+                    Type, CategoryID, MatchRule, Confidence, Notes,
+                    SourceFile, ImportedAt
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                original["id"],
+                account_id,
+                row["date"],
+                row["description"],
+                amount,
+                original.get("type", ""),
+                category_id,
+                match_rule,
+                confidence,
+                row.get("notes", ""),
+                original["source_file"],
+                imported_at,
+            ))
+            return cur.lastrowid
+        except sqlite3.IntegrityError:
+            return None  # duplicate
+
+    # ── Write expense rows ────────────────────────────────────────────────────
+    for _, row in expense_df.iterrows():
+        original = original_lookup.get((row["description"], row["date"]))
+        if not original:
+            continue
+        # Flip sign back to parser convention: positive = expense
+        amount = -row["amount"]
+        txn_id = _insert_txn(row, original, amount)
+        if txn_id:
+            inserted += 1
+        else:
+            skipped += 1
+
+    # ── Write income rows + allocations ───────────────────────────────────────
+    for _, row in income_df.iterrows():
+        original = original_lookup.get((row["description"], row["date"]))
+        if not original:
+            continue
+        # Income: amount is positive in UI (money in), flip to negative for DB
+        # (parser convention: positive = expense, negative = income)
+        amount = -row["amount"]
+        txn_id = _insert_txn(row, original, amount)
+        if txn_id is None:
+            skipped += 1
+            continue
+        inserted += 1
+
+        # Write allocation rows for this income transaction
+        orig_id     = original["id"]
+        allocations = allocation_data.get(orig_id, {})
+        for bucket_name, values in allocations.items():
+            bucket_id = bucket_id_map.get(bucket_name)
+            if bucket_id is None:
+                continue
+            cur.execute("""
+                INSERT INTO income_allocations
+                    (TransactionID, BucketID, Percentage, Amount)
+                VALUES (?, ?, ?, ?)
+            """, (
+                txn_id,
+                bucket_id,
+                values["percentage"],
+                values["amount"],
+            ))
+            allocations_written += 1
+
+    con.commit()
+    con.close()
+    return {
+        "inserted":            inserted,
+        "skipped":             skipped,
+        "allocations_written": allocations_written,
+    }
