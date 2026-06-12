@@ -24,6 +24,8 @@ def get_account_id(cur, account_name: str) -> int:
     return row[0] if row else None
 
 def write_transactions(reviewed_df, original_txns: list[dict], account_name: str) -> dict:
+    with open("debug_log.txt", "a") as f:
+        f.write(f"DB path: {DB_PATH}\n")
     """
     Takes the edited DataFrame from st.data_editor, the original enriched
     transaction list (for fields not in the df), and the selected account name.
@@ -86,8 +88,12 @@ def write_transactions(reviewed_df, original_txns: list[dict], account_name: str
                 imported_at,
             ))
             inserted += 1
-        except sqlite3.IntegrityError:
+        #except sqlite3.IntegrityError:
             # DedupeHash already exists — skip duplicate
+            #skipped += 1
+
+        except sqlite3.IntegrityError as e:
+            print(f"SKIPPED {original['id']} — {original['description_raw']} — reason: {e}")
             skipped += 1
 
     con.commit()
