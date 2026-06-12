@@ -1,0 +1,2 @@
+write_transactions called
+DB path: C:\Users\stuti\budget-tracker\data\budget.db
