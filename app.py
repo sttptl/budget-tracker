@@ -66,6 +66,7 @@ def _render_visa_review():
     CATEGORIES = _get_categories()
 
     df = pd.DataFrame([{
+        "txn_id":      t["id"],
         "date":        _fmt_date(t),
         "description": t["description_raw"],
         "amount":      t["amount"],
@@ -79,6 +80,7 @@ def _render_visa_review():
         df,
         use_container_width=True,
         column_config={
+            "txn_id":      None,
             "date":        st.column_config.TextColumn("Date", disabled=True),
             "description": st.column_config.TextColumn("Description", disabled=True),
             "amount":      st.column_config.NumberColumn("Amount", format="$%.2f", disabled=True),
@@ -136,6 +138,7 @@ def _render_chequing_review():
             CATEGORIES = _get_categories()
 
             income_df = pd.DataFrame([{
+                "txn_id":      t["id"],
                 "date":        _fmt_date(t),
                 "description": t["description_raw"],
                 "amount":      t["amount"],
@@ -149,6 +152,7 @@ def _render_chequing_review():
                 income_df,
                 use_container_width=True,
                 column_config={
+                    "txn_id":      None,
                     "date":        st.column_config.TextColumn("Date", disabled=True),
                     "description": st.column_config.TextColumn("Description", disabled=True),
                     "amount":      st.column_config.NumberColumn("Amount", format="$%.2f", disabled=True),
@@ -228,6 +232,7 @@ def _render_chequing_review():
             CATEGORIES = _get_categories()
 
             expense_df = pd.DataFrame([{
+                "txn_id":      t["id"],
                 "date":        _fmt_date(t),
                 "description": t["description_raw"],
                 "amount":      t["amount"],
@@ -242,6 +247,7 @@ def _render_chequing_review():
                 expense_df,
                 use_container_width=True,
                 column_config={
+                    "txn_id":      None,
                     "date":        st.column_config.TextColumn("Date", disabled=True),
                     "description": st.column_config.TextColumn("Description", disabled=True),
                     "amount":      st.column_config.NumberColumn("Amount", format="$%.2f", disabled=True),

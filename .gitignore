@@ -9,5 +9,11 @@ Imports/
 # Database (Part E)
 data/*.db
 
+# Local debug logs
+debug_log.txt
+
 # VS Code
 .vscode/
+
+# MACOS ignores
+.DS_Store

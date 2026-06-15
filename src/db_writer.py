@@ -37,17 +37,13 @@ def write_transactions(reviewed_df, original_txns: list[dict], account_name: str
     account_id = get_account_id(cur, account_name)
     imported_at = datetime.now().isoformat()
 
-    # Build a lookup from description+date → original txn for dedup hash and type
-    original_lookup = {
-        (t["description_raw"], t["date"].strftime("%Y-%m-%d")): t
-        for t in original_txns
-    }
+    original_lookup = {t["id"]: t for t in original_txns}
 
     inserted = 0
     skipped = 0
 
     for _, row in reviewed_df.iterrows():
-        original = original_lookup.get((row["description"], row["date"]))
+        original = original_lookup.get(row["txn_id"])
         if not original:
             continue
 
@@ -119,11 +115,7 @@ def write_chequing_transactions(
     account_id  = get_account_id(cur, account_name)
     imported_at = datetime.now().isoformat()
 
-    # Build lookup: (description_raw, date_str) → original txn
-    original_lookup = {
-        (t["description_raw"], t["date"].strftime("%Y-%m-%d") if hasattr(t["date"], "strftime") else t["date"]): t
-        for t in original_txns
-    }
+    original_lookup = {t["id"]: t for t in original_txns}
 
     # Build bucket name → BucketID lookup
     cur.execute("SELECT BucketName, BucketID FROM buckets")
@@ -173,7 +165,7 @@ def write_chequing_transactions(
 
     # ── Write expense rows ────────────────────────────────────────────────────
     for _, row in expense_df.iterrows():
-        original = original_lookup.get((row["description"], row["date"]))
+        original = original_lookup.get(row["txn_id"])
         if not original:
             continue
         # Flip sign back to parser convention: positive = expense
@@ -186,7 +178,7 @@ def write_chequing_transactions(
 
     # ── Write income rows + allocations ───────────────────────────────────────
     for _, row in income_df.iterrows():
-        original = original_lookup.get((row["description"], row["date"]))
+        original = original_lookup.get(row["txn_id"])
         if not original:
             continue
         # Income: amount is positive in UI (money in), flip to negative for DB
